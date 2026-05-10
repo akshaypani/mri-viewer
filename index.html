@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MRI Viewer — N. Akshay Pani</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@400;500;600&display=swap');
+
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0a0f;--surface:#12121a;--border:#1e1e2e;
+  --text:#e0e0e8;--dim:#6b6b80;--accent:#4ecdc4;--accent2:#45b7aa;
+}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
+  height:100vh;display:flex;flex-direction:column;overflow:hidden;user-select:none}
+
+.topbar{display:flex;align-items:center;justify-content:space-between;
+  padding:12px 24px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.topbar h1{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;
+  letter-spacing:1px;color:var(--accent)}
+.topbar .patient{font-size:13px;color:var(--dim)}
+.topbar .controls-info{font-size:11px;color:var(--dim);font-family:'JetBrains Mono',monospace}
+
+.series-bar{display:flex;gap:0;overflow-x:auto;border-bottom:1px solid var(--border);
+  background:var(--surface);flex-shrink:0;scrollbar-width:thin}
+.series-tab{padding:10px 18px;font-size:12px;font-family:'JetBrains Mono',monospace;
+  color:var(--dim);cursor:pointer;border:none;background:transparent;
+  border-bottom:2px solid transparent;white-space:nowrap;transition:all .2s}
+.series-tab:hover{color:var(--text);background:rgba(78,205,196,.05)}
+.series-tab.active{color:var(--accent);border-bottom-color:var(--accent);
+  background:rgba(78,205,196,.08)}
+
+.viewer{flex:1;display:flex;align-items:center;justify-content:center;
+  position:relative;overflow:hidden;background:var(--bg)}
+.viewer img{max-width:90%;max-height:90%;object-fit:contain;border-radius:4px}
+
+.nav-arrow{position:absolute;top:50%;transform:translateY(-50%);
+  width:48px;height:80px;background:rgba(255,255,255,.04);border:1px solid var(--border);
+  color:var(--dim);font-size:22px;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;border-radius:8px;transition:all .15s;backdrop-filter:blur(8px)}
+.nav-arrow:hover{background:rgba(78,205,196,.12);color:var(--accent);border-color:var(--accent2)}
+.nav-arrow.left{left:16px}
+.nav-arrow.right{right:16px}
+
+.bottombar{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 24px;border-top:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.slice-info{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text)}
+.slice-info span{color:var(--accent)}
+
+.progress-track{flex:1;max-width:500px;height:4px;background:var(--border);
+  border-radius:2px;margin:0 24px;cursor:pointer;position:relative}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));
+  border-radius:2px;transition:width .1s}
+.progress-track:hover .progress-fill{height:6px;margin-top:-1px}
+
+.play-controls{display:flex;align-items:center;gap:12px}
+.play-btn{background:rgba(78,205,196,.1);border:1px solid var(--accent);color:var(--accent);
+  width:32px;height:32px;border-radius:50%;cursor:pointer;display:flex;
+  align-items:center;justify-content:center;font-size:14px;transition:all .15s}
+.play-btn:hover{background:rgba(78,205,196,.25)}
+.play-btn.active{background:var(--accent);color:var(--bg)}
+
+.speed-control{display:flex;align-items:center;gap:8px}
+.speed-control input[type=range]{width:80px;accent-color:var(--accent)}
+.speed-label{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dim);min-width:50px}
+
+.scroll-hint{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);
+  font-size:12px;color:var(--dim);font-family:'JetBrains Mono',monospace;
+  background:rgba(10,10,15,.85);padding:6px 16px;border-radius:20px;
+  border:1px solid var(--border);opacity:0;transition:opacity .5s;pointer-events:none}
+.scroll-hint.show{opacity:1}
+
+.loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--dim)}
+
+@media(max-width:768px){
+  .topbar{padding:10px 14px;flex-wrap:wrap;gap:4px}
+  .series-tab{padding:8px 12px;font-size:11px}
+  .nav-arrow{width:36px;height:60px;font-size:18px}
+  .nav-arrow.left{left:6px}
+  .nav-arrow.right{right:6px}
+  .bottombar{padding:8px 14px;flex-wrap:wrap;gap:6px}
+  .progress-track{max-width:none;order:3;width:100%;margin:4px 0 0}
+  .controls-info{display:none}
+}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <h1>MRI VIEWER</h1>
+  <span class="patient">N. Akshay Pani &middot; 2026-05-06</span>
+  <span class="controls-info">← → arrows &middot; scroll &middot; spacebar play</span>
+</div>
+
+<div class="series-bar" id="seriesBar"></div>
+
+<div class="viewer" id="viewer">
+  <img id="mainImg" src="" alt="MRI Slice">
+  <button class="nav-arrow left" id="prevBtn">&#8249;</button>
+  <button class="nav-arrow right" id="nextBtn">&#8250;</button>
+  <div class="scroll-hint" id="scrollHint">Scroll or use ← → to navigate slices</div>
+  <div class="loading" id="loadingMsg"></div>
+</div>
+
+<div class="bottombar">
+  <div class="slice-info" id="sliceInfo">Slice <span>1</span> / 21</div>
+  <div class="progress-track" id="progressTrack">
+    <div class="progress-fill" id="progressFill" style="width:0%"></div>
+  </div>
+  <div class="play-controls">
+    <button class="play-btn" id="playBtn" title="Spacebar to play/pause">▶</button>
+    <div class="speed-control">
+      <input type="range" id="speedSlider" min="1" max="20" value="8">
+      <span class="speed-label" id="speedLabel">8 fps</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const SERIES=[{name:"Series 01",images:["images/Series_01_001.png","images/Series_01_002.png","images/Series_01_003.png","images/Series_01_004.png","images/Series_01_005.png","images/Series_01_006.png","images/Series_01_007.png","images/Series_01_008.png","images/Series_01_009.png","images/Series_01_010.png","images/Series_01_011.png","images/Series_01_012.png","images/Series_01_013.png","images/Series_01_014.png","images/Series_01_015.png","images/Series_01_016.png","images/Series_01_017.png","images/Series_01_018.png","images/Series_01_019.png","images/Series_01_020.png","images/Series_01_021.png"]},{name:"Series 02",images:["images/Series_02_001.png","images/Series_02_002.png","images/Series_02_003.png","images/Series_02_004.png","images/Series_02_005.png","images/Series_02_006.png","images/Series_02_007.png","images/Series_02_008.png","images/Series_02_009.png","images/Series_02_010.png","images/Series_02_011.png","images/Series_02_012.png","images/Series_02_013.png","images/Series_02_014.png","images/Series_02_015.png","images/Series_02_016.png","images/Series_02_017.png","images/Series_02_018.png"]},{name:"Series 03",images:["images/Series_03_001.png","images/Series_03_002.png","images/Series_03_003.png","images/Series_03_004.png","images/Series_03_005.png","images/Series_03_006.png","images/Series_03_007.png","images/Series_03_008.png","images/Series_03_009.png","images/Series_03_010.png","images/Series_03_011.png","images/Series_03_012.png","images/Series_03_013.png"]},{name:"Series 04",images:["images/Series_04_001.png","images/Series_04_002.png","images/Series_04_003.png","images/Series_04_004.png","images/Series_04_005.png","images/Series_04_006.png","images/Series_04_007.png","images/Series_04_008.png","images/Series_04_009.png","images/Series_04_010.png","images/Series_04_011.png","images/Series_04_012.png","images/Series_04_013.png","images/Series_04_014.png"]},{name:"Series 05",images:["images/Series_05_001.png","images/Series_05_002.png","images/Series_05_003.png","images/Series_05_004.png","images/Series_05_005.png","images/Series_05_006.png","images/Series_05_007.png","images/Series_05_008.png","images/Series_05_009.png","images/Series_05_010.png","images/Series_05_011.png","images/Series_05_012.png","images/Series_05_013.png","images/Series_05_014.png"]},{name:"Series 06",images:["images/Series_06_001.png","images/Series_06_002.png","images/Series_06_003.png","images/Series_06_004.png","images/Series_06_005.png","images/Series_06_006.png","images/Series_06_007.png","images/Series_06_008.png","images/Series_06_009.png","images/Series_06_010.png","images/Series_06_011.png","images/Series_06_012.png","images/Series_06_013.png","images/Series_06_014.png","images/Series_06_015.png","images/Series_06_016.png","images/Series_06_017.png","images/Series_06_018.png","images/Series_06_019.png","images/Series_06_020.png"]},{name:"Series 07",images:["images/Series_07_001.png","images/Series_07_002.png","images/Series_07_003.png","images/Series_07_004.png","images/Series_07_005.png","images/Series_07_006.png","images/Series_07_007.png","images/Series_07_008.png","images/Series_07_009.png","images/Series_07_010.png","images/Series_07_011.png","images/Series_07_012.png","images/Series_07_013.png"]},{name:"Series 08",images:["images/Series_08_001.png","images/Series_08_002.png","images/Series_08_003.png","images/Series_08_004.png","images/Series_08_005.png","images/Series_08_006.png","images/Series_08_007.png","images/Series_08_008.png","images/Series_08_009.png","images/Series_08_010.png","images/Series_08_011.png","images/Series_08_012.png","images/Series_08_013.png","images/Series_08_014.png","images/Series_08_015.png","images/Series_08_016.png"]},{name:"Series 09",images:["images/Series_09_001.png","images/Series_09_002.png","images/Series_09_003.png","images/Series_09_004.png","images/Series_09_005.png","images/Series_09_006.png","images/Series_09_007.png","images/Series_09_008.png","images/Series_09_009.png","images/Series_09_010.png","images/Series_09_011.png","images/Series_09_012.png","images/Series_09_013.png"]},{name:"Series 10",images:["images/Series_10_001.png","images/Series_10_002.png","images/Series_10_003.png","images/Series_10_004.png","images/Series_10_005.png","images/Series_10_006.png","images/Series_10_007.png","images/Series_10_008.png","images/Series_10_009.png","images/Series_10_010.png","images/Series_10_011.png","images/Series_10_012.png","images/Series_10_013.png"]},{name:"Series 11",images:["images/Series_11_001.png","images/Series_11_002.png","images/Series_11_003.png","images/Series_11_004.png","images/Series_11_005.png","images/Series_11_006.png","images/Series_11_007.png","images/Series_11_008.png","images/Series_11_009.png","images/Series_11_010.png","images/Series_11_011.png","images/Series_11_012.png","images/Series_11_013.png","images/Series_11_014.png","images/Series_11_015.png","images/Series_11_016.png"]},{name:"Series 12",images:["images/Series_12_001.png","images/Series_12_002.png","images/Series_12_003.png","images/Series_12_004.png","images/Series_12_005.png","images/Series_12_006.png","images/Series_12_007.png","images/Series_12_008.png","images/Series_12_009.png","images/Series_12_010.png","images/Series_12_011.png","images/Series_12_012.png","images/Series_12_013.png","images/Series_12_014.png"]},{name:"Series 13",images:["images/Series_13_001.png","images/Series_13_002.png","images/Series_13_003.png","images/Series_13_004.png","images/Series_13_005.png","images/Series_13_006.png","images/Series_13_007.png","images/Series_13_008.png","images/Series_13_009.png","images/Series_13_010.png","images/Series_13_011.png","images/Series_13_012.png","images/Series_13_013.png","images/Series_13_014.png"]},{name:"Series 14",images:["images/Series_14_001.png","images/Series_14_002.png","images/Series_14_003.png","images/Series_14_004.png","images/Series_14_005.png","images/Series_14_006.png","images/Series_14_007.png","images/Series_14_008.png","images/Series_14_009.png","images/Series_14_010.png","images/Series_14_011.png","images/Series_14_012.png","images/Series_14_013.png","images/Series_14_014.png"]},{name:"Series 15",images:["images/Series_15_001.png","images/Series_15_002.png","images/Series_15_003.png","images/Series_15_004.png","images/Series_15_005.png","images/Series_15_006.png","images/Series_15_007.png","images/Series_15_008.png","images/Series_15_009.png","images/Series_15_010.png","images/Series_15_011.png","images/Series_15_012.png","images/Series_15_013.png","images/Series_15_014.png"]}];
+
+let currentSeries=0,currentSlice=0,playing=false,playInterval=null,fps=8;
+const cache={};
+
+const seriesBar=document.getElementById('seriesBar'),mainImg=document.getElementById('mainImg'),
+sliceInfo=document.getElementById('sliceInfo'),progressFill=document.getElementById('progressFill'),
+progressTrack=document.getElementById('progressTrack'),playBtn=document.getElementById('playBtn'),
+speedSlider=document.getElementById('speedSlider'),speedLabel=document.getElementById('speedLabel'),
+scrollHint=document.getElementById('scrollHint'),loadingMsg=document.getElementById('loadingMsg');
+
+SERIES.forEach((s,i)=>{const t=document.createElement('button');
+t.className='series-tab'+(i===0?' active':'');
+t.textContent=s.name+' ('+s.images.length+')';t.onclick=()=>switchSeries(i);seriesBar.appendChild(t)});
+
+function preloadSeries(idx){
+  const s=SERIES[idx];
+  s.images.forEach(src=>{
+    if(!cache[src]){const img=new Image();img.src=src;cache[src]=img}
+  });
+}
+
+function switchSeries(i){currentSeries=i;currentSlice=0;
+document.querySelectorAll('.series-tab').forEach((t,j)=>t.classList.toggle('active',j===i));
+preloadSeries(i);updateView()}
+
+function updateView(){
+  const s=SERIES[currentSeries],src=s.images[currentSlice];
+  mainImg.src=src;
+  sliceInfo.innerHTML='Slice <span>'+(currentSlice+1)+'</span> / '+s.images.length;
+  progressFill.style.width=((currentSlice+1)/s.images.length*100)+'%';
+  // Preload neighbors
+  [currentSlice-1,currentSlice+1].forEach(n=>{
+    if(n>=0&&n<s.images.length&&!cache[s.images[n]]){
+      const img=new Image();img.src=s.images[n];cache[s.images[n]]=img}
+  });
+}
+
+function navigate(d){const s=SERIES[currentSeries];
+currentSlice=Math.max(0,Math.min(s.images.length-1,currentSlice+d));updateView()}
+
+function togglePlay(){playing=!playing;playBtn.textContent=playing?'❚❚':'▶';
+playBtn.classList.toggle('active',playing);
+if(playing){playInterval=setInterval(()=>{const s=SERIES[currentSeries];
+currentSlice++;if(currentSlice>=s.images.length)currentSlice=0;updateView()},1000/fps)}
+else clearInterval(playInterval)}
+
+document.addEventListener('keydown',e=>{
+if(e.key==='ArrowLeft'){navigate(-1);e.preventDefault()}
+else if(e.key==='ArrowRight'){navigate(1);e.preventDefault()}
+else if(e.key===' '){togglePlay();e.preventDefault()}});
+
+document.getElementById('prevBtn').onclick=()=>navigate(-1);
+document.getElementById('nextBtn').onclick=()=>navigate(1);
+
+document.getElementById('viewer').addEventListener('wheel',e=>{
+e.preventDefault();navigate(e.deltaY>0?1:-1)},{passive:false});
+
+progressTrack.addEventListener('click',e=>{const r=progressTrack.getBoundingClientRect();
+const p=(e.clientX-r.left)/r.width;const s=SERIES[currentSeries];
+currentSlice=Math.round(p*(s.images.length-1));updateView()});
+
+playBtn.onclick=togglePlay;
+
+speedSlider.oninput=()=>{fps=parseInt(speedSlider.value);speedLabel.textContent=fps+' fps';
+if(playing){clearInterval(playInterval);
+playInterval=setInterval(()=>{const s=SERIES[currentSeries];
+currentSlice++;if(currentSlice>=s.images.length)currentSlice=0;updateView()},1000/fps)}};
+
+let touchStartX=0;const viewer=document.getElementById('viewer');
+viewer.addEventListener('touchstart',e=>{touchStartX=e.touches[0].clientX});
+viewer.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-touchStartX;
+if(Math.abs(dx)>40)navigate(dx<0?1:-1)});
+
+// Initial load
+preloadSeries(0);
+updateView();
+scrollHint.classList.add('show');setTimeout(()=>scrollHint.classList.remove('show'),4000);
+</script>
+</body>
+</html>
